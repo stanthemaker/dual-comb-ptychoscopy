@@ -6,44 +6,43 @@ c = 299792458;
 lambda_center = 1550e-9;      
 f_center      = c/lambda_center;
 
-f_sig_rel = 37.5e9 ;
+f_sig_rel = 27.6e9 ;
 f_sig = f_center + f_sig_rel;
-width_sig_Hz  = 10e6;         % 10 MHz FWHM
 % --- Comb Parameters ---
-frep_1 = 10.2e9;
-frep_2 = 10.3e9;
+frep_1 = 27.2e9;
+frep_2 = 27.3e9;
 d_frep     = frep_2 - frep_1;   % 100 MHz difference
-% comb2_shift = 0.5e9;
-N_combline    = 11;             % Number of comb lines
-n_indices  = 1:10;              % Indices centered at 0
+comb2_shift = 80e6;
+n_indices  = -3:3;              % Indices centered at 0
 
 % --- sampling batch setup ---
 % to prevent aliasing, 1 / dt > 2 f_max = 2 ( 0.5 frep) 
-% NT * Nt *dt = 1 / d_frep = 1ms
+% NT * Nt *dt > 1 / d_frep = 1ms
 
-Fs = 120e9;
+Fs = 200e9;
 dt = 1 / Fs;
-Nt = 512; % number of time step in a batch
+Nt = 1024; % number of time step in a batch
 NT = 250; % number of time batch 
-T_batch = Nt *dt; % sampling time for a batch
+T_batch = Nt * dt; % sampling time for a batch
 d_fRF = 1 / T_batch; %spectral resolution
 T = NT * T_batch;
 t = 0:dt:T-dt;
 
 % --- Create Combs ---
-comb1 = zeros(size(t));
-comb2 = zeros(size(t));
+E_c1 = zeros(size(t));
+E_c2 = zeros(size(t));
 for n = n_indices
     fn1 = n * frep_1;
-    fn2 = n * frep_2;
-    comb1 = comb1 + exp(1i * 2*pi * fn1 * t);
-    comb2 = comb2 + exp(1i * 2*pi * fn2 * t);
+    fn2 = n * frep_2 + comb2_shift;
+    E_c1 = E_c1 + exp(1i * 2*pi * fn1 * t);
+    E_c2 = E_c2 + exp(1i * 2*pi * fn2 * t);
 end
 % Normalize
-E_c1 = comb1 / max(abs(comb1));
-E_c2 = comb2 / max(abs(comb2));
+E_c1 = E_c1 / max(abs(E_c1));
+E_c2 = E_c2 / max(abs(E_c2));
 
 % --- Create Incoherent Signal ---
+% width_sig_Hz  = 10e6;           % 10 MHz FWHM
 % noise = (randn(size(t)) + 1i*randn(size(t)));
 % envelope = noise; 
 % [b, a] = butter(1, width_sig_Hz/(Fs/2));
@@ -52,19 +51,18 @@ E_c2 = comb2 / max(abs(comb2));
 signal = exp(1i * 2*pi * f_sig_rel * t);
 E_s = 2 * signal / mean(abs(signal)); 
 
-I1_raw = abs(E_s + E_c1).^2 - abs(E_c1).^2 - abs(E_s).^2;
-I2_raw = abs(E_s + E_c2).^2 - abs(E_c2).^2 - abs(E_s).^2;
+I1 = abs(E_s + E_c1).^2 - abs(E_c1).^2 - abs(E_s).^2;
+I2 = abs(E_s + E_c2).^2 - abs(E_c2).^2 - abs(E_s).^2;
 
 cutoff_freq = frep_1 /2;
-I1 = lowpass(I1_raw, cutoff_freq, Fs);
-I2 = lowpass(I2_raw, cutoff_freq, Fs);
+I1 = lowpass(I1, cutoff_freq, Fs);
+I2 = lowpass(I2, cutoff_freq, Fs);
 
 I1 = reshape(I1, Nt, NT);
 I2 = reshape(I2, Nt, NT);
 
 F1 = fftshift(fft(I1,[],1),1);
 F2 = fftshift(fft(I2,[],1),1);
-
 
 
 %% paper implementation ( need to know the complex field
@@ -77,7 +75,7 @@ F2 = fftshift(fft(I2,[],1),1);
 % S2 = filtfilt(b_lp, a_lp, S2);
 % 
 % plot_complex(S1,Fs);
-% plot_beatnotes(S1,S2,dt);
+
 % 
 % S1 = reshape(S1, Nt, NT);
 % S2 = reshape(S2, Nt, NT);
@@ -103,7 +101,7 @@ global_freq_axis = ((1:total_bins).' - center_idx) * d_fRF + f_center;
 for n = n_indices
     Cn = zeros(Nt, 1);
 
-    delta_n = n * d_frep;
+    delta_n = (n * d_frep) + comb2_shift;
     shift_bins = round(delta_n / d_fRF);
 
     for j = 1:NT
@@ -141,7 +139,7 @@ plot(global_freq_axis / 1e12, spec_recon, "LineWidth",1.5);
 title('Stitched Dual-Comb Spectrum');
 xlabel('Optical Frequency (THz)');
 ylabel('Signal Power (dB)')
-ylim([-80 max(spec_recon)+10]);
+ylim([max(spec_recon)-60 max(spec_recon)+10]);
 xline(f_center / 1e12,'--b', "Center freq");
 xline(f_sig / 1e12,'--r', "Signal freq");
 set(gca,"Fontsize",18)

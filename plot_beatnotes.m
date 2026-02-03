@@ -9,8 +9,8 @@ function analyze_beat_notes(S1, S2, dt)
     Fs = 1/dt;
     
     % Frequency Axis
-    frequencies = (-L/2 : L/2 - 1) * (Fs/L);
-    
+    frequencies =;
+     (-L/2 : L/2 - 1) * (Fs/L)
     % FFT (Normalized)
     spec_I1 = abs(fftshift(fft(I1))) / L;
     spec_I2 = abs(fftshift(fft(I2))) / L;
