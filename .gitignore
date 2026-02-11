@@ -1,8 +1,10 @@
-.fig
-.csv
-.png
-.jpg
-.mat
-.jpeg
+*.csv
+*.CSV
+*.mat
+*.fig
+*.png
+*.jpg
+*.jpeg
+*.asv
 .DS_Store
-.asv
+~
