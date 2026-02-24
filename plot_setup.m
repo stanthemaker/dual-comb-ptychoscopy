@@ -9,7 +9,7 @@ function plotsetup(comb1 , comb2, signal, Fs)
     P(2:end-1) = 2*P(2:end-1);
     P = 20*log10(P); 
     figure;
-    plot(f/1e9, P, 'LineWidth', 1.5);
+    plot(f, P, 'LineWidth', 1.5);
     hold on;
     
     Y = fft(comb2);
@@ -17,17 +17,17 @@ function plotsetup(comb1 , comb2, signal, Fs)
     P = abs(Y/L);
     P(2:end-1) = 2*P(2:end-1);
     P = 20*log10(P);
-    plot(f/1e9, P, 'LineWidth', 1.5);
+    plot(f, P, 'LineWidth', 1.5);
 
     Y = fft(signal);
     Y = Y(1:L/2+1);
     P = abs(Y/L);
     P(2:end-1) = 2*P(2:end-1);
     P = 20*log10(P);
-    plot(f/1e9, P, 'LineWidth', 1.5);
+    plot(f, P, 'LineWidth', 1.5);
 
     set(gca, "Fontsize", 18,"Linewidth",1.5)
-    xlabel("Frequency (GHz)")
+    xlabel("Frequency")
     ylabel("PWD (dB)")
     legend("comb1", "comb2", "signal");
 end
