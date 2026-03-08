@@ -4,12 +4,12 @@ clc;
 
 c = 299792458; 
 % --- Comb Parameters ---
-frep_1 = 27e3;
-frep_2 = 27.2e3;
+frep_1 = 10e3;
+frep_2 = 10.08e3;
 d_frep     = abs(frep_2 - frep_1);
 d_tau = abs(1/frep_2 - 1/frep_1);
 
-n_indices = 1:20;
+n_indices = 8:42;
 
 % --- sampling setup ---
 Fs = 1400e3;
@@ -17,7 +17,7 @@ dt = 1 / Fs;
 N_avg = 100 + 2;             %% number of averages ; +2 for buffer
 T_igm = 1 / d_frep;        %% time duration for an entire inteferogram
 T = N_avg * T_igm;
-Nt = T / dt;
+Nt = ceil(T / dt);
 df = 1 / T;
 t = (0:Nt-1) * dt;
 N_tau = round(1/frep_1 / d_tau) -1;
@@ -66,9 +66,9 @@ figure
 
 plot(f_psd/1e3, 10*log10(Pss_norm)); hold on
 plot(f_psd/1e3, 10*log10(P12_norm));
-plot(f_psd/1e3, 10*log10(Gt));
+% plot(f_psd/1e3, 10*log10(Gt));
 ylim([-150 , 0])
-legend("Pss norm", "P12 norm","ground truth")
+legend("Pss norm", "P12 norm")
 xlabel("Frequency (kHz)")
 set(gca, "Fontsize", 18,"Linewidth",1.5)
 
@@ -79,7 +79,7 @@ E_c2s = E_c2 .* conj(E_s);
 M1M2_avg = zeros(N_tau, 1);
 
 % Define a fixed margin to capture the pulse widths (e.g., 15% of a period).
-pulse_margin = round(0.4 * Fs / frep_1); 
+pulse_margin = round(0.1 * Fs / frep_1); 
 
 for n_avg = 1:N_avg-1
     T_sweep = T_igm * (n_avg);
@@ -96,74 +96,108 @@ for n_avg = 1:N_avg-1
         idx_1 = round(T_pulse1 * Fs) + 1;
         idx_2 = round(T_pulse2 * Fs) + 1;
         
-        % 4. Adaptive Window: A tight bounding box around both pulses
-        idx_start = min(idx_1, idx_2) - pulse_margin;
-        idx_end   = max(idx_1, idx_2) + pulse_margin;
+        % 4. INDEPENDENT WINDOWS: Tight bounding box around EACH pulse
+        idx1_start = max(1, idx_1 - pulse_margin);
+        idx1_end   = min(length(E_c1s), idx_1 + pulse_margin);
         
-        % 5. Sum and multiply
-        M1 = sum(E_c1s(idx_start:idx_end));
-        M2 = sum(E_c2s(idx_start:idx_end));
+        idx2_start = max(1, idx_2 - pulse_margin);
+        idx2_end   = min(length(E_c2s), idx_2 + pulse_margin);
+        
+        % 5. Sum and multiply independently
+        M1 = sum(E_c1s(idx1_start:idx1_end));
+        M2 = sum(E_c2s(idx2_start:idx2_end));
         M1M2_avg(n_tau) = M1M2_avg(n_tau) + (conj(M1) * M2);
         
         % --- plotting to verify ---
-        % t_window = t(idx_start:idx_end) * 1e6; 
+        % Create a static viewing window around E_c1 to watch E_c2 walk through it
+        % view_margin = round(20e-6 * Fs); % 20 us view margin
+        % idx_view_start = max(1, idx_1 - view_margin);
+        % idx_view_end   = min(length(t), idx_1 + view_margin);
         % 
-        % E1_window = abs(E_c1(idx_start:idx_end)); 
-        % E2_window = abs(E_c2(idx_start:idx_end));
-        % Es_window = abs(E_s(idx_start:idx_end));
+        % t_window = t(idx_view_start:idx_view_end) * 1e6; 
+        % E1_window = abs(E_c1(idx_view_start:idx_view_end)); 
+        % E2_window = abs(E_c2(idx_view_start:idx_view_end));
+        % Es_window = abs(E_s(idx_view_start:idx_view_end));
         % 
         % clf; 
         % plot(t_window, E1_window, 'b', 'LineWidth', 1.5); hold on;
         % plot(t_window, E2_window, 'r', 'LineWidth', 1.5);
         % plot(t_window, Es_window, 'Color',[.7 .7 .7], 'LineWidth', 1.5);
         % 
-        % % Draw lines for BOTH calculated centers to verify the tracking
+        % % Draw lines for BOTH calculated centers
         % xline(T_pulse1 * 1e6, 'b--', 'E_{c1} Center', 'LineWidth', 1.5);
         % xline(T_pulse2 * 1e6, 'r--', 'E_{c2} Nearest', 'LineWidth', 1.5);
         % 
-        % title(sprintf('Sweep %d, n\\_tau = %d\\nAdaptive Window: %g \\mus wide', ...
-        %       n_avg, n_tau, (idx_end - idx_start)/Fs * 1e6));
+        % % Highlight the independent integration windows with dotted lines
+        % xline(t(idx1_start)*1e6, 'b--'); xline(t(idx1_end)*1e6, 'b--');
+        % xline(t(idx2_start)*1e6, 'r--'); xline(t(idx2_end)*1e6, 'r--');
+        % 
         % xlabel('Laboratory Time (\mu s)');
         % ylabel('Electric Field Envelope |E|');
         % legend('E_{c1}', 'E_{c2}', 'E_s', 'Location', 'northeast');
         % grid on;
         % 
-        % % Lock the X-axis width so the "accordion" effect is obvious
-        % xlim([T_pulse1*1e6 - 20, T_pulse1*1e6 + 20]); 
+        % % Lock the X-axis width 
+        % xlim([T_pulse1*1e6 - 20, T_pulse1*1e6 + 20]);
         % 
         % pause;
     end
 end
+
+%time domain -> delay time domain
+%%
+tau_wrapped = zeros(N_tau, 1);
+for n_tau = 1:N_tau
+    if n_tau <= ceil(N_tau/2)
+        tau_wrapped(n_tau) = -(n_tau - 1) * d_tau; % 0 to -T/2
+    else
+        tau_wrapped(n_tau) = (N_tau - n_tau + 1) * d_tau; % +T/2 to 0
+    end
+end
+[tau_sorted, sort_idx] = sort(tau_wrapped);
+
 M1M2_avg = M1M2_avg / (N_avg-1);
-M1M2_fft = fftshift(fft(M1M2_avg));
+% 1. sort_idx unscrambles the data
+% 2. flip() reverses the time axis to match MATLAB's cpsd convention
+M1M2_avg = flip(M1M2_avg(sort_idx));
+N_pad = length(M1M2_avg) * 10;
+
+M1M2_fft = fftshift(fft(M1M2_avg, N_pad));
 M1M2_fft_norm = M1M2_fft / max(abs(M1M2_fft));
 
 Fs_M1M2 = 1 / d_tau;
-df_M1M2 = 1 / (N_tau * d_tau);
-f_M1M2 = ((0 : N_tau-1) - floor(N_tau/2)) * df_M1M2;
+df_M1M2 = 1 / (N_pad * d_tau);
+f_M1M2 = ((0 : N_pad-1) - floor(N_pad/2)) * df_M1M2;
+% df_M1M2 = 1 / (N_tau * d_tau);
+% f_M1M2 = ((0 : N_tau-1) - floor(N_tau/2)) * df_M1M2;
 %%
-
+figure
+plot(f_psd/1e3, 10*log10(Pss_norm)); hold on 0
+% plot(f_psd/1e3, 10*log10(P12_norm));
+plot(f_M1M2/1e3, 10*log10(M1M2_fft_norm));
+ylim([-70 ,0])
+xlim([-700,700])
 % --- 3. Stacked Subplot Comparison ---
-figure('Name', 'Dual-Comb Spectrum Validation', 'Position', [100, 100, 800, 600]);
-
-% Top Plot: Simulated Extraction
-subplot(2, 1, 1);
-plot(f_M1M2, 10*log10(M1M2_fft_norm), 'b', 'LineWidth', 1.5);
-title('Simulated Extraction: FFT of \langle M_1 M_2^* \rangle');
-ylabel('Magnitude (dB)');
-grid on;
-% Limit the X-axis to the relevant RF band to match visual scales if necessary
-% xlim([-frep_1/2, frep_1/2]); 
-ylim([-200 5]);
-
-% Bottom Plot: Theoretical Ground Truth
-subplot(2, 1, 2);
-plot(f_psd, 10*log10(Gt), 'r', 'LineWidth', 1.5);
-title('Theoretical Ground Truth: P_{ss} \times P_{12}');
-xlabel('RF Frequency (Hz)');
-ylabel('Magnitude (dB)');
-grid on;
-% Match the X-axis limits of the top plot for a 1-to-1 visual comparison
-xlim([min(f_M1M2) max(f_M1M2)]); 
-ylim([-200 5]);
+% figure('Name', 'Dual-Comb Spectrum Validation', 'Position', [100, 100, 800, 600]);
+% 
+% % Top Plot: Simulated Extraction
+% subplot(2, 1, 1);
+% plot(f_M1M2, 10*log10(M1M2_fft_norm), 'b', 'LineWidth', 1.5);
+% title('Simulated Extraction: FFT of \langle M_1 M_2^* \rangle');
+% ylabel('Magnitude (dB)');
+% grid on;
+% % Limit the X-axis to the relevant RF band to match visual scales if necessary
+% % xlim([-frep_1/2, frep_1/2]); 
+% ylim([-200 5]);
+% 
+% % Bottom Plot: Theoretical Ground Truth
+% subplot(2, 1, 2);
+% plot(f_psd, 10*log10(Gt), 'r', 'LineWidth', 1.5);
+% title('Theoretical Ground Truth: P_{ss} \times P_{12}');
+% xlabel('RF Frequency (Hz)');
+% ylabel('Magnitude (dB)');
+% grid on;
+% % Match the X-axis limits of the top plot for a 1-to-1 visual comparison
+% xlim([min(f_M1M2) max(f_M1M2)]); 
+% ylim([-200 5]);
 
